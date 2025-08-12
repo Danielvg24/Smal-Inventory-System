@@ -124,7 +124,7 @@ export class InventoryService {
   }
 
   // Create a new item
-  createItem(request: CreateItemRequest): {
+  createItem(request: CreateItemRequest, receipts?: Array<{ filename: string; originalname: string; mimetype: string; size: number }>): {
     success: boolean;
     message: string;
     item?: InventoryItem;
@@ -160,6 +160,11 @@ export class InventoryService {
         serialNumber: serialNumber?.trim() || undefined
       });
 
+      // Save receipts metadata if provided
+      if (receipts && receipts.length > 0) {
+        this.inventoryRepo.saveReceipts(trimmedItemId, receipts);
+      }
+
       return {
         success: true,
         message: `Item "${trimmedItemId}" created successfully`,
@@ -183,6 +188,21 @@ export class InventoryService {
     return this.inventoryRepo.getItemHistory(itemId.trim());
   }
 
+  // Get receipts list for an item
+  getItemReceipts(itemId: string) {
+    if (!itemId || itemId.trim() === '') {
+      throw new Error('Item ID is required');
+    }
+    const trimmed = itemId.trim();
+    // Ensure item exists
+    const item = this.inventoryRepo.getItemById(trimmed);
+    if (!item) {
+      return { exists: false, receipts: [] as any[] };
+    }
+    const receipts = this.inventoryRepo.getReceiptsByItemId(trimmed);
+    return { exists: true, receipts };
+  }
+
   // Update item details
   updateItem(itemId: string, updates: Partial<CreateItemRequest>): {
     success: boolean;
@@ -204,7 +224,7 @@ export class InventoryService {
     }
 
     // Validate updates
-    const cleanUpdates: Partial<CreateItemRequest> = {};
+    const cleanUpdates: any = {};
     
     if (updates.itemName !== undefined) {
       const trimmedName = updates.itemName.trim();
@@ -216,6 +236,9 @@ export class InventoryService {
     
     if (updates.serialNumber !== undefined) {
       cleanUpdates.serialNumber = updates.serialNumber.trim() || undefined;
+    }
+    if ((updates as any).photoFilename !== undefined) {
+      cleanUpdates.photoFilename = (updates as any).photoFilename;
     }
 
     const success = this.inventoryRepo.updateItem(trimmedItemId, cleanUpdates);

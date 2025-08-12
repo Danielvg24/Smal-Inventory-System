@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: inventory-backend-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - DB_PATH=/app/database/inventory.db
+      - CORS_ORIGIN=http://localhost:3001
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX_REQUESTS=1000
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/database:/app/database
+      - dev_backend_logs:/app/logs
+    ports:
+      - "5001:5000"
+    networks:
+      - inventory-dev-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: inventory-frontend-dev
+    restart: unless-stopped
+    environment:
+      - VITE_API_URL=http://localhost:5001/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3001:3000"
+    networks:
+      - inventory-dev-network
+    depends_on:
+      backend-dev:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  inventory-dev-network:
+    driver: bridge
+    name: inventory-dev-network
+
+volumes:
+  dev_backend_logs:
+    name: inventory-dev-backend-logs 

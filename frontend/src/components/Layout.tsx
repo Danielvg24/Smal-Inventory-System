@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -8,7 +8,6 @@ import {
   Menu,
   X
 } from 'lucide-react';
-import { useState } from 'react';
 import { cn } from '../utils';
 
 interface LayoutProps {
@@ -41,15 +40,37 @@ const navigationItems = [
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [displayMode, setDisplayMode] = useState<'auto' | 'desktop' | 'mobile'>(() => {
+    const saved = localStorage.getItem('displayMode');
+    return (saved === 'desktop' || saved === 'mobile') ? (saved as any) : 'auto';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('displayMode', displayMode);
+  }, [displayMode]);
 
   const isActiveRoute = (href: string) => {
     return location.pathname === href;
   };
 
+  const desktopSidebarClasses = displayMode === 'desktop'
+    ? 'fixed inset-y-0 flex w-64 flex-col'
+    : displayMode === 'mobile'
+    ? 'hidden'
+    : 'hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col';
+
+  const mainContentClasses = cn('flex flex-col flex-1', 
+    displayMode === 'desktop' ? 'pl-64' : 
+    displayMode === 'mobile' ? '' : 'lg:pl-64'
+  );
+
+  const mobileHeaderWrapperClasses = displayMode === 'desktop' ? 'hidden' : 
+    displayMode === 'mobile' ? 'block' : 'lg:hidden';
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+      <div className={desktopSidebarClasses}>
         <div className="flex min-h-0 flex-1 flex-col bg-white border-r border-gray-200">
           <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
             <div className="flex items-center flex-shrink-0 px-4">
@@ -57,6 +78,18 @@ export default function Layout({ children }: LayoutProps) {
               <span className="ml-2 text-xl font-bold text-gray-900">
                 Inventory System
               </span>
+            </div>
+            <div className="px-4 mt-4">
+              <label className="block text-xs font-medium text-gray-500 mb-1">Display mode</label>
+              <select
+                className="w-full border border-gray-300 rounded-md px-2 py-1 text-sm"
+                value={displayMode}
+                onChange={(e) => setDisplayMode(e.target.value as any)}
+              >
+                <option value="auto">Auto</option>
+                <option value="desktop">Desktop</option>
+                <option value="mobile">Mobile</option>
+              </select>
             </div>
             <nav className="mt-8 flex-1 space-y-1 px-2">
               {navigationItems.map((item) => {
@@ -90,7 +123,7 @@ export default function Layout({ children }: LayoutProps) {
       </div>
 
       {/* Mobile menu */}
-      <div className="lg:hidden">
+      <div className={mobileHeaderWrapperClasses}>
         <div className="flex items-center justify-between bg-white border-b border-gray-200 px-4 py-3">
           <div className="flex items-center">
             <Package className="h-6 w-6 text-primary-600" />
@@ -98,12 +131,26 @@ export default function Layout({ children }: LayoutProps) {
               Inventory System
             </span>
           </div>
-          <button
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="text-gray-500 hover:text-gray-700"
-          >
-            <Menu className="h-6 w-6" />
-          </button>
+          <div className="flex items-center gap-3">
+            <div>
+              <label className="sr-only">Display mode</label>
+              <select
+                className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+                value={displayMode}
+                onChange={(e) => setDisplayMode(e.target.value as any)}
+              >
+                <option value="auto">Auto</option>
+                <option value="desktop">Desktop</option>
+                <option value="mobile">Mobile</option>
+              </select>
+            </div>
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+          </div>
         </div>
 
         {/* Mobile menu overlay */}
@@ -161,7 +208,7 @@ export default function Layout({ children }: LayoutProps) {
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64 flex flex-col flex-1">
+      <div className={mainContentClasses}>
         <main className="flex-1">
           <div className="py-6">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

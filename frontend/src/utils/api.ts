@@ -9,7 +9,8 @@ import {
   HistoryEntry 
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Use Vite env var consistently so all frontend calls hit the same backend
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5000/api';
 
 // Create axios instance with default config
 const api = axios.create({
@@ -66,12 +67,17 @@ export const inventoryApi = {
     stats: InventoryStats;
     count: number;
   }> {
-    const params = new URLSearchParams();
-    if (search) params.append('search', search);
-    if (status) params.append('status', status);
-    
-    const response = await api.get<ApiResponse>(`/items?${params.toString()}`);
-    return response.data.data;
+    try {
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      if (status) params.append('status', status);
+
+      const response = await api.get<ApiResponse>(`/items?${params.toString()}`);
+      return response.data.data;
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'Failed to load items');
+      return { items: [], stats: { totalItems: 0, availableItems: 0, checkedOutItems: 0 }, count: 0 };
+    }
   },
 
   // Get item by ID
@@ -144,6 +150,20 @@ export const inventoryApi = {
   }> {
     const response = await api.get<ApiResponse>(`/items/${itemId}/history`);
     return response.data.data;
+  },
+
+  // Get receipts for an item
+  async getItemReceipts(itemId: string) {
+    const response = await api.get<ApiResponse>(`/items/${itemId}/receipts`);
+    return response.data.data as Array<{
+      id: number;
+      itemId: string;
+      filename: string;
+      originalName: string;
+      mimeType: string;
+      sizeBytes: number;
+      uploadedAt: string;
+    }>;
   },
 
   // Get inventory statistics

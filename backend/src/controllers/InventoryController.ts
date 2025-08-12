@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
+import type * as Express from 'express';
 import { InventoryService } from '../services/InventoryService';
 import { asyncHandler } from '../middleware/errorHandler';
+import { maybeUploadPhoto } from '../middleware/uploads';
+// upload handled at the route level
 
 export class InventoryController {
   private inventoryService: InventoryService;
@@ -14,8 +17,8 @@ export class InventoryController {
     const { search, status } = req.query;
     
     const items = this.inventoryService.getAllItems(
-      search as string, 
-      status as string
+      search as string | undefined, 
+      status as string | undefined
     );
     
     const stats = this.inventoryService.getInventoryStats();
@@ -34,6 +37,13 @@ export class InventoryController {
   getItemById = asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
     
+    if (!itemId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Item ID is required'
+      });
+    }
+    
     const item = this.inventoryService.getItemById(itemId);
     
     if (!item) {
@@ -43,30 +53,43 @@ export class InventoryController {
       });
     }
     
-    res.json({
+    return res.json({
       success: true,
       data: item
     });
   });
 
-  // POST /api/items - Create new item
+  // POST /api/items - Create new item with optional PDF receipts
   createItem = asyncHandler(async (req: Request, res: Response) => {
-    const { itemId, itemName, serialNumber } = req.body;
+    const { itemId, itemName, serialNumber } = req.body as any;
+    const files: any = (req as any).files;
     
+    // Extract receipts
+    const receiptFiles = files?.receipts || [];
+    const sanitizedFiles = receiptFiles.map((f: any) => ({
+      filename: f.filename,
+      originalname: f.originalname,
+      mimetype: f.mimetype,
+      size: f.size,
+    }));
+
     const result = this.inventoryService.createItem({
       itemId,
       itemName,
       serialNumber
-    });
+    }, sanitizedFiles);
     
     if (result.success) {
-      res.status(201).json({
-        success: true,
-        message: result.message,
-        data: result.item
-      });
+      // If a photo was uploaded in the same multipart request, process and attach
+      const photoFile = files?.photo?.[0];
+      if (photoFile && photoFile.processedFilename) {
+        (this as any).inventoryService['inventoryRepo'].updateItem(itemId, { photoFilename: photoFile.processedFilename } as any);
+        const updatedItem = this.inventoryService.getItemById(itemId)!;
+        return res.status(201).json({ success: true, message: result.message, data: updatedItem });
+      }
+      return res.status(201).json({ success: true, message: result.message, data: result.item });
     } else {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: result.message,
         data: result.item
@@ -79,19 +102,50 @@ export class InventoryController {
     const { itemId } = req.params;
     const updates = req.body;
     
+    if (!itemId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Item ID is required'
+      });
+    }
+    
     const result = this.inventoryService.updateItem(itemId, updates);
     
     if (result.success) {
-      res.json({
+      return res.json({
         success: true,
         message: result.message,
         data: result.item
       });
     } else {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: result.message
       });
+    }
+  });
+
+  // POST /api/items/:itemId/photo - Upload or replace item photo
+  uploadItemPhoto = asyncHandler(async (req: Request, res: Response) => {
+    const { itemId } = req.params as any;
+    if (!itemId) {
+      return res.status(400).json({ success: false, message: 'Item ID is required' });
+    }
+    const item = this.inventoryService.getItemById(itemId);
+    if (!item) {
+      return res.status(404).json({ success: false, message: `Item with ID "${itemId}" not found` });
+    }
+    const file: any = (req as any).file;
+    if (!file || !file.processedFilename) {
+      return res.status(400).json({ success: false, message: 'No photo uploaded or processing failed' });
+    }
+    // Update the item with the new photo filename
+    const result = this.inventoryService.updateItem(itemId, { photoFilename: file.processedFilename } as any);
+    if (result.success) {
+      const updated = this.inventoryService.getItemById(itemId)!;
+      return res.json({ success: true, message: 'Photo updated successfully', data: updated });
+    } else {
+      return res.status(500).json({ success: false, message: 'Failed to update photo in database' });
     }
   });
 
@@ -99,15 +153,22 @@ export class InventoryController {
   deleteItem = asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
     
+    if (!itemId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Item ID is required'
+      });
+    }
+    
     const result = this.inventoryService.deleteItem(itemId);
     
     if (result.success) {
-      res.json({
+      return res.json({
         success: true,
         message: result.message
       });
     } else {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         message: result.message
       });
@@ -151,6 +212,13 @@ export class InventoryController {
   getItemHistory = asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
     
+    if (!itemId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Item ID is required'
+      });
+    }
+    
     // First check if item exists
     const item = this.inventoryService.getItemById(itemId);
     if (!item) {
@@ -162,13 +230,30 @@ export class InventoryController {
     
     const history = this.inventoryService.getItemHistory(itemId);
     
-    res.json({
+    return res.json({
       success: true,
       data: {
         item,
         history
       }
     });
+  });
+
+  // GET /api/items/:itemId/receipts - List item receipts metadata
+  getItemReceipts = asyncHandler(async (req: Request, res: Response) => {
+    const { itemId } = req.params;
+    
+    if (!itemId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Item ID is required'
+      });
+    }
+    const result = this.inventoryService.getItemReceipts(itemId);
+    if (!result.exists) {
+      return res.status(404).json({ success: false, message: `Item with ID "${itemId}" not found` });
+    }
+    return res.json({ success: true, data: result.receipts });
   });
 
   // GET /api/stats - Get inventory statistics

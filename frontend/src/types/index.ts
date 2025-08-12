@@ -3,6 +3,7 @@ export interface InventoryItem {
   itemId: string;
   itemName: string;
   serialNumber?: string;
+  photoFilename?: string;
   status: 'Available' | 'Checked Out';
   createdAt?: string;
   updatedAt?: string;
@@ -51,3 +52,13 @@ export interface HistoryEntry {
   timestamp: string;
   notes?: string;
 } 
+
+export interface Receipt {
+  id: number;
+  itemId: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+}

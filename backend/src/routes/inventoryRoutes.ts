@@ -7,6 +7,7 @@ import {
   validateSearch,
   handleValidationErrors
 } from '../middleware/validation';
+import { maybeUploadReceipts, maybeUploadPhoto, maybeUploadReceiptsAndPhoto } from '../middleware/uploads';
 
 const router = Router();
 const inventoryController = new InventoryController();
@@ -25,6 +26,8 @@ router.get('/items/:itemId', inventoryController.getItemById);
 // POST /api/items - Create new item
 router.post(
   '/items',
+  // handle uploads only when multipart; otherwise skip
+  maybeUploadReceiptsAndPhoto as any,
   validateCreateItem,
   handleValidationErrors,
   inventoryController.createItem
@@ -36,6 +39,13 @@ router.put(
   validateUpdateItem,
   handleValidationErrors,
   inventoryController.updateItem
+);
+
+// POST /api/items/:itemId/photo - Upload or replace item photo
+router.post(
+  '/items/:itemId/photo',
+  maybeUploadPhoto,
+  inventoryController.uploadItemPhoto
 );
 
 // DELETE /api/items/:itemId - Delete item
@@ -51,6 +61,9 @@ router.post(
 
 // GET /api/items/:itemId/history - Get item history
 router.get('/items/:itemId/history', inventoryController.getItemHistory);
+
+// GET /api/items/:itemId/receipts - List item receipts metadata
+router.get('/items/:itemId/receipts', inventoryController.getItemReceipts);
 
 // GET /api/stats - Get inventory statistics
 router.get('/stats', inventoryController.getStats);

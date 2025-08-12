@@ -3,6 +3,7 @@ export interface InventoryItem {
   itemId: string;
   itemName: string;
   serialNumber?: string;
+  photoFilename?: string;
   status: 'Available' | 'Checked Out';
   createdAt?: string;
   updatedAt?: string;
@@ -22,6 +23,7 @@ export interface CreateItemRequest {
   itemId: string;
   itemName: string;
   serialNumber?: string;
+  photoFilename?: string;
 }
 
 export interface InventoryStats {

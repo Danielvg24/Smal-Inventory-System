@@ -37,6 +37,7 @@ const createTables = (): void => {
       item_id TEXT UNIQUE NOT NULL,
       item_name TEXT NOT NULL,
       serial_number TEXT,
+      photo_filename TEXT,
       status TEXT NOT NULL DEFAULT 'Available' CHECK (status IN ('Available', 'Checked Out')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -69,6 +70,20 @@ const createTables = (): void => {
   try {
     db.exec(createItemsTable);
     db.exec(createHistoryTable);
+    // Receipts table for storing uploaded receipt metadata
+    const createReceiptsTable = `
+      CREATE TABLE IF NOT EXISTS inventory_receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (item_id) REFERENCES inventory_items (item_id)
+      )
+    `;
+    db.exec(createReceiptsTable);
     db.exec(createIndexes);
     
     // Create trigger to update updated_at timestamp
@@ -81,6 +96,17 @@ const createTables = (): void => {
       END
     `;
     db.exec(createTrigger);
+
+    // Migration: ensure photo_filename column exists on inventory_items
+    try {
+      const columns = db.prepare("PRAGMA table_info('inventory_items')").all() as Array<any>;
+      const hasPhoto = columns.some(c => c.name === 'photo_filename');
+      if (!hasPhoto) {
+        db.exec("ALTER TABLE inventory_items ADD COLUMN photo_filename TEXT");
+      }
+    } catch (mErr) {
+      console.error('Migration check failed:', mErr);
+    }
     
     console.log('Database tables created successfully');
   } catch (error) {

@@ -1,14 +1,19 @@
 import { getDatabase } from '../database/connection';
 import { InventoryItem, CreateItemRequest, InventoryStats } from '../models/InventoryItem';
+import fs from 'fs';
+import path from 'path';
 
 export class InventoryRepository {
-  private db = getDatabase();
+  private get db() {
+    return getDatabase();
+  }
 
   // Get all items with optional filtering
   getAllItems(search?: string, status?: string): InventoryItem[] {
     let query = `
       SELECT 
         id, item_id as itemId, item_name as itemName, serial_number as serialNumber,
+        photo_filename as photoFilename,
         status, created_at as createdAt, updated_at as updatedAt,
         checked_out_by as checkedOutBy, checked_out_at as checkedOutAt,
         last_action_by as lastActionBy
@@ -40,6 +45,7 @@ export class InventoryRepository {
     const stmt = this.db.prepare(`
       SELECT 
         id, item_id as itemId, item_name as itemName, serial_number as serialNumber,
+        photo_filename as photoFilename,
         status, created_at as createdAt, updated_at as updatedAt,
         checked_out_by as checkedOutBy, checked_out_at as checkedOutAt,
         last_action_by as lastActionBy
@@ -62,6 +68,72 @@ export class InventoryRepository {
     this.addHistoryEntry(item.itemId, 'created', undefined, item.serialNumber);
     
     return this.getItemById(item.itemId)!;
+  }
+
+  // Save uploaded receipts metadata
+  saveReceipts(itemId: string, files: Array<{ filename: string; originalname: string; mimetype: string; size: number }>): void {
+    const insert = this.db.prepare(`
+      INSERT INTO inventory_receipts (item_id, filename, original_name, mime_type, size_bytes)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    const insertMany = this.db.transaction((rows: typeof files) => {
+      for (const f of rows) {
+        insert.run(itemId, f.filename, f.originalname, f.mimetype, f.size);
+      }
+    });
+    if (files.length > 0) insertMany(files);
+  }
+
+  // List receipts for an item
+  getReceiptsByItemId(itemId: string): Array<{
+    id: number;
+    itemId: string;
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    sizeBytes: number;
+    uploadedAt: string;
+  }> {
+    const stmt = this.db.prepare(`
+      SELECT 
+        id,
+        item_id as itemId,
+        filename,
+        original_name as originalName,
+        mime_type as mimeType,
+        size_bytes as sizeBytes,
+        uploaded_at as uploadedAt
+      FROM inventory_receipts
+      WHERE item_id = ?
+      ORDER BY uploaded_at DESC, id DESC
+    `);
+    return stmt.all(itemId) as any;
+  }
+
+  // Get a single receipt by id
+  getReceiptById(receiptId: number): {
+    id: number;
+    itemId: string;
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    sizeBytes: number;
+    uploadedAt: string;
+  } | null {
+    const stmt = this.db.prepare(`
+      SELECT 
+        id,
+        item_id as itemId,
+        filename,
+        original_name as originalName,
+        mime_type as mimeType,
+        size_bytes as sizeBytes,
+        uploaded_at as uploadedAt
+      FROM inventory_receipts
+      WHERE id = ?
+    `);
+    const row = stmt.get(receiptId);
+    return (row as any) || null;
   }
 
   // Check in item
@@ -147,6 +219,28 @@ export class InventoryRepository {
 
   // Delete item (admin function)
   deleteItem(itemId: string): boolean {
+    // Remove associated receipts files and DB rows
+    try {
+      const receipts = this.getReceiptsByItemId(itemId);
+      const receiptsDir = path.join('/app', 'uploads', 'receipts');
+      receipts.forEach(r => {
+        try {
+          const filePath = path.join(receiptsDir, r.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (_) {
+          // ignore file deletion errors
+        }
+      });
+    } catch (_) {
+      // ignore listing errors
+    }
+
+    // Delete child rows first to satisfy FK constraints
+    this.db.prepare(`DELETE FROM inventory_receipts WHERE item_id = ?`).run(itemId);
+    this.db.prepare(`DELETE FROM inventory_history WHERE item_id = ?`).run(itemId);
+
     const stmt = this.db.prepare(`DELETE FROM inventory_items WHERE item_id = ?`);
     const result = stmt.run(itemId);
     return result.changes > 0;
@@ -165,6 +259,10 @@ export class InventoryRepository {
     if (updates.serialNumber !== undefined) {
       fields.push('serial_number = ?');
       values.push(updates.serialNumber);
+    }
+    if ((updates as any).photoFilename !== undefined) {
+      fields.push('photo_filename = ?');
+      values.push((updates as any).photoFilename);
     }
     
     if (fields.length === 0) return false;

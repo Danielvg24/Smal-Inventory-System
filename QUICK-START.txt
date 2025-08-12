@@ -1,0 +1,41 @@
+========================================================================
+🐳 INVENTORY MANAGEMENT SYSTEM - QUICK START
+========================================================================
+
+PREREQUISITES:
+1. Install Docker Desktop from: https://www.docker.com/products/docker-desktop/
+2. Make sure Docker Desktop is running (check system tray)
+
+QUICK START (3 STEPS):
+1. Extract this ZIP file to any folder on your PC
+2. Open PowerShell in that folder
+3. Run: .\docker-start.ps1
+
+ACCESS YOUR APPLICATION:
+- Web Interface: http://localhost:3000
+- API: http://localhost:5000
+
+STOP THE APPLICATION:
+- Run: .\docker-stop.ps1
+- Or: docker-compose down
+
+HELP:
+- Read DOCKER-IMPORT-GUIDE.md for detailed instructions
+- Run: .\docker-start.ps1 help
+
+FEATURES:
+✅ Modern React frontend with Tailwind CSS
+✅ Node.js/TypeScript backend API
+✅ SQLite database with persistent storage
+✅ Health monitoring and logging
+✅ Production and development modes
+
+PORTS:
+- Production: Frontend(3000), Backend(5000)
+- Development: Frontend(3001), Backend(5001)
+
+For support, check the troubleshooting section in DOCKER-IMPORT-GUIDE.md
+
+========================================================================
+Enjoy your Inventory Management System! 🚀
+======================================================================== 

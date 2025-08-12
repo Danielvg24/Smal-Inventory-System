@@ -8,6 +8,8 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config/config';
 import { initializeDatabase, closeDatabase } from './database/connection';
 import inventoryRoutes from './routes/inventoryRoutes';
+import path from 'path';
+import fs from 'fs';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -65,6 +67,38 @@ app.get('/health', (req: express.Request, res: express.Response) => {
 // API routes
 app.use('/api', inventoryRoutes);
 
+// Static serving of uploaded receipt PDFs
+const receiptsDir = path.join('/app', 'uploads', 'receipts');
+const photosDir = path.join('/app', 'uploads', 'photos');
+app.use('/uploads/receipts', (req, res, next) => {
+  // Always allow cross-origin for static file previews
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+});
+if (fs.existsSync(receiptsDir)) {
+  app.use('/uploads/receipts', express.static(receiptsDir, {
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    }
+  }));
+}
+
+app.use('/uploads/photos', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  next();
+});
+if (fs.existsSync(photosDir)) {
+  app.use('/uploads/photos', express.static(photosDir, {
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    }
+  }));
+}
+
 // 404 handler
 app.use(notFoundHandler);
 
@@ -93,7 +127,7 @@ const gracefulShutdown = (signal: string) => {
 };
 
 // Start server
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`
 🚀 Inventory Management System API
 📍 Server running on port ${config.port}
